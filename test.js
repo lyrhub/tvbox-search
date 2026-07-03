@@ -664,9 +664,10 @@ async function main() {
         return clean;
       });
 
+    const allSpiderSites = [...spiderSearchableSites, ...spiderFailedSites].slice(0, 100);
     const spiderOutput = {
       spider: spider,
-      sites: [...spiderSearchableSites, ...spiderFailedSites],
+      sites: allSpiderSites,
       lives: output.lives,
       parses: output.parses
     };
