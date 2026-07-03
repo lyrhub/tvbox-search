@@ -161,6 +161,7 @@ ${spiderRows ? `<h3 class="section-title">🕷 Spider 状态</h3>
 const html = generateStatusPage();
 fs.writeFileSync(path.join(OUTPUT_DIR, 'index.html'), html);
 fs.writeFileSync(path.join(OUTPUT_DIR, '.nojekyll'), '');
+fs.writeFileSync(path.join(OUTPUT_DIR, 'CNAME'), 'tv.fr.sd');
 
 console.log('Pages 生成完成:');
 console.log(`  output/index.html      - 状态页面`);
