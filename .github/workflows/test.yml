@@ -2,7 +2,7 @@ name: TVBox Search Test & Deploy
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # 每30分钟运行一次（搜索测试比连通性测试慢）
+    - cron: '0 */6 * * *'  # 每6小时运行一次
   workflow_dispatch:  # 手动触发
   push:
     branches: [master]
