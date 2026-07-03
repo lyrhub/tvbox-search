@@ -17,6 +17,11 @@ if (fs.existsSync('searchable.json')) {
 if (fs.existsSync('mixed.json')) {
   fs.copyFileSync('mixed.json', path.join(OUTPUT_DIR, 'mixed.json'));
 }
+// 复制 per-spider JSON 文件
+for (let i = 1; i <= 10; i++) {
+  const f = `spider${i}.json`;
+  if (fs.existsSync(f)) fs.copyFileSync(f, path.join(OUTPUT_DIR, f));
+}
 if (fs.existsSync('results.json')) {
   fs.copyFileSync('results.json', path.join(OUTPUT_DIR, 'results.json'));
 }
@@ -95,6 +100,14 @@ function generateStatusPage() {
   }).join('');
 
   const successRate = totalTested > 0 ? Math.round(okCount / totalTested * 100) : 0;
+
+  // 生成 per-spider 文件链接
+  const spiderFileLinks = Object.entries(spiders)
+    .filter(([, info]) => typeof info === 'object' ? info.alive : info)
+    .map(([url, info], idx) => {
+      const name = url.split('/').pop().split(';')[0];
+      return `<a href="./spider${idx + 1}.json">🕷 ${name}</a>`;
+    }).join('\n  ');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -392,6 +405,7 @@ tr:hover td { background: #1c2128; }
 <div class="nav">
   <a href="./searchable.json">📋 可搜索配置</a>
   <a href="./mixed.json">📦 混合配置</a>
+  ${spiderFileLinks}
   <a href="./results.json">📊 测试详情</a>
   <a href="https://github.com/lyrhub/tvbox-search">⭐ GitHub</a>
 </div>

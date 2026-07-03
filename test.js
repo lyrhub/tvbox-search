@@ -604,6 +604,78 @@ async function main() {
   fs.writeFileSync('mixed.json', JSON.stringify(mixedOutput, null, 2));
   console.log(`  mixed.json: ${searchableSites.length} 可搜索 + ${failedSitesWithLatency.length} 最快不可搜索 = ${mixedOutput.sites.length} 站点`);
 
+  // 生成每个 spider 独立的 JSON 文件
+  // 每个文件包含: 可搜索站点 + 5个最快不可搜索站点，但只保留兼容该 spider 的 type:3 站点
+  console.log('\n生成 per-spider JSON...');
+  let spiderIndex = 0;
+  for (const [spider, classes] of spiderClassMap) {
+    if (deadSpiders.has(spider)) continue; // 跳过不可用的 spider
+    spiderIndex++;
+    const spiderClasses = classes;
+    const spiderFileName = `spider${spiderIndex}.json`;
+
+    // 辅助函数：判断站点是否兼容当前 spider
+    const isCompatibleWithThisSpider = (site) => {
+      // 非 type:3 站点不受 spider 限制，保留
+      if (site.type !== 3) return true;
+      // type:3 但没有 api 字段的，保留
+      if (!site.api) return true;
+      // 检查 api 类名是否在当前 spider 的类列表中
+      return isSiteCompatible(site.api, spiderClasses);
+    };
+
+    // 可搜索站点（兼容当前 spider）
+    const spiderSearchableSites = merged.sites.filter(site => {
+      const key = site.key || site.name;
+      const r = results[key];
+      if (!r || r.status !== 'ok') return false;
+      return isCompatibleWithThisSpider(site);
+    }).map(site => {
+      const { _baseUrl, _spider, _source, ...clean } = site;
+      if (_baseUrl) {
+        if (clean.api && clean.api.startsWith('./')) clean.api = resolveUrl(clean.api, _baseUrl);
+        if (clean.ext && typeof clean.ext === 'string' && clean.ext.startsWith('./')) clean.ext = resolveUrl(clean.ext, _baseUrl);
+      }
+      return clean;
+    });
+
+    // 5个最快不可搜索站点（兼容当前 spider）
+    const spiderFailedSites = merged.sites
+      .filter(site => {
+        const key = site.key || site.name;
+        const name = site.name || '';
+        if (EXCLUDE_RE.test(key) || EXCLUDE_RE.test(name) || EXCLUDE_RE.test(site.api || '')) return false;
+        const r = results[key];
+        if (!r || r.status !== 'fail' || !r.latency) return false;
+        return isCompatibleWithThisSpider(site);
+      })
+      .sort((a, b) => {
+        const ra = results[a.key || a.name];
+        const rb = results[b.key || b.name];
+        return (ra?.latency || 99999) - (rb?.latency || 99999);
+      })
+      .slice(0, 5)
+      .map(site => {
+        const { _baseUrl, _spider, _source, ...clean } = site;
+        if (_baseUrl) {
+          if (clean.api && clean.api.startsWith('./')) clean.api = resolveUrl(clean.api, _baseUrl);
+          if (clean.ext && typeof clean.ext === 'string' && clean.ext.startsWith('./')) clean.ext = resolveUrl(clean.ext, _baseUrl);
+        }
+        return clean;
+      });
+
+    const spiderOutput = {
+      spider: spider,
+      sites: [...spiderSearchableSites, ...spiderFailedSites],
+      lives: output.lives,
+      parses: output.parses
+    };
+
+    fs.writeFileSync(spiderFileName, JSON.stringify(spiderOutput, null, 2));
+    const spiderName = spider.split('/').pop().split(';')[0];
+    console.log(`  ${spiderFileName}: ${spiderName} → ${spiderSearchableSites.length} 可搜索 + ${spiderFailedSites.length} 不可搜索 = ${spiderOutput.sites.length} 站点`);
+  }
+
   fs.writeFileSync('results.json', JSON.stringify({
     tested_at: new Date().toISOString(),
     keyword,
