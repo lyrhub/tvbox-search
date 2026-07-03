@@ -567,6 +567,43 @@ async function main() {
   }), parses: merged.parses };
 
   fs.writeFileSync('searchable.json', JSON.stringify(output, null, 2));
+
+  // 生成 mixed.json - 可搜索站点 + 5个最快的不可搜索站点
+  console.log('生成 mixed.json...');
+  const failedSitesWithLatency = merged.sites
+    .filter(site => {
+      const key = site.key || site.name;
+      const name = site.name || '';
+      // 排除网盘等
+      if (EXCLUDE_RE.test(key) || EXCLUDE_RE.test(name) || EXCLUDE_RE.test(site.api || '')) return false;
+      const r = results[key];
+      // 只要测试过且失败的（有延迟数据说明站点本身是通的，只是搜索不可用）
+      return r && r.status === 'fail' && r.latency > 0;
+    })
+    .sort((a, b) => {
+      const ra = results[a.key || a.name];
+      const rb = results[b.key || b.name];
+      return (ra?.latency || 99999) - (rb?.latency || 99999);
+    })
+    .slice(0, 5)
+    .map(site => {
+      const { _baseUrl, _spider, _source, ...clean } = site;
+      if (_baseUrl) {
+        if (clean.api && clean.api.startsWith('./')) clean.api = resolveUrl(clean.api, _baseUrl);
+        if (clean.ext && typeof clean.ext === 'string' && clean.ext.startsWith('./')) clean.ext = resolveUrl(clean.ext, _baseUrl);
+      }
+      return clean;
+    });
+
+  const mixedOutput = {
+    spider: SPIDER,
+    sites: [...searchableSites, ...failedSitesWithLatency],
+    lives: output.lives,
+    parses: output.parses
+  };
+  fs.writeFileSync('mixed.json', JSON.stringify(mixedOutput, null, 2));
+  console.log(`  mixed.json: ${searchableSites.length} 可搜索 + ${failedSitesWithLatency.length} 最快不可搜索 = ${mixedOutput.sites.length} 站点`);
+
   fs.writeFileSync('results.json', JSON.stringify({
     tested_at: new Date().toISOString(),
     keyword,

@@ -14,6 +14,9 @@ if (fs.existsSync('searchable.json')) {
   fs.copyFileSync('searchable.json', path.join(OUTPUT_DIR, 'searchable.json'));
   fs.copyFileSync('searchable.json', path.join(OUTPUT_DIR, 'index.json'));
 }
+if (fs.existsSync('mixed.json')) {
+  fs.copyFileSync('mixed.json', path.join(OUTPUT_DIR, 'mixed.json'));
+}
 if (fs.existsSync('results.json')) {
   fs.copyFileSync('results.json', path.join(OUTPUT_DIR, 'results.json'));
 }
@@ -388,6 +391,7 @@ tr:hover td { background: #1c2128; }
 
 <div class="nav">
   <a href="./searchable.json">📋 可搜索配置</a>
+  <a href="./mixed.json">📦 混合配置</a>
   <a href="./results.json">📊 测试详情</a>
   <a href="https://github.com/lyrhub/tvbox-search">⭐ GitHub</a>
 </div>
@@ -477,4 +481,5 @@ fs.writeFileSync(path.join(OUTPUT_DIR, 'CNAME'), 'tv.fr.sd');
 console.log('Pages 生成完成:');
 console.log(`  output/index.html      - 状态页面`);
 console.log(`  output/searchable.json - 可搜索配置 (TVBox 订阅地址)`);
+console.log(`  output/mixed.json      - 混合配置 (可搜索 + 5个最快不可搜索)`);
 console.log(`  output/results.json    - 测试结果详情`);
