@@ -492,16 +492,22 @@ async function main() {
 
   console.log(`\n可测试站点: ${testableSites.length} / ${merged.sites.length}`);
 
-  // 搜索测试
+  // 分离 type:1/其他 和 type:3 站点
+  const type1Sites = testableSites.filter(s => s.type !== 3);
+  const type3Sites = testableSites.filter(s => s.type === 3);
+  console.log(`\n  type:1/CMS 站点: ${type1Sites.length} (做搜索测试)`);
+  console.log(`  type:3/Spider 站点: ${type3Sites.length} (做连通性测试)`);
+
+  // === type:1 搜索测试 ===
   console.log(`\n开始搜索测试 (关键词: ${SEARCH_KEYWORDS[0]})...\n`);
   const results = {};
   let tested = 0, searchable = 0;
-  const keyword = SEARCH_KEYWORDS[0]; // 主测试关键词
+  const keyword = SEARCH_KEYWORDS[0];
 
-  const CONCURRENCY = 5; // 搜索测试并发控制（比连通性测试低，因为请求更重）
+  const CONCURRENCY = 5;
 
-  for (let i = 0; i < testableSites.length; i += CONCURRENCY) {
-    const batch = testableSites.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < type1Sites.length; i += CONCURRENCY) {
+    const batch = type1Sites.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.allSettled(batch.map(async (site) => {
       const key = site.key || site.name;
       const searchInfo = await getSiteSearchInfo(site, site._baseUrl);
@@ -537,13 +543,65 @@ async function main() {
       }
     }
 
-    const progress = Math.min(i + CONCURRENCY, testableSites.length);
-    if (progress % 20 === 0 || progress === testableSites.length) {
-      console.log(`  进度: ${progress}/${testableSites.length} (可搜索: ${searchable}/${tested})`);
+    const progress = Math.min(i + CONCURRENCY, type1Sites.length);
+    if (progress % 20 === 0 || progress === type1Sites.length) {
+      console.log(`  搜索进度: ${progress}/${type1Sites.length} (可搜索: ${searchable}/${tested})`);
     }
   }
 
-  console.log(`\n搜索测试完成: ${tested} 测试, ${searchable} 可搜索`);
+  console.log(`  搜索测试完成: ${tested} 测试, ${searchable} 可搜索`);
+
+  // === type:3 连通性测试 ===
+  console.log(`\n开始 type:3 连通性测试...\n`);
+  let type3Tested = 0, type3Alive = 0;
+  const CONCURRENCY_TYPE3 = 10; // 连通性测试可以更高并发
+
+  for (let i = 0; i < type3Sites.length; i += CONCURRENCY_TYPE3) {
+    const batch = type3Sites.slice(i, i + CONCURRENCY_TYPE3);
+    const batchResults = await Promise.allSettled(batch.map(async (site) => {
+      const key = site.key || site.name;
+      // 提取 host 用于连通性测试
+      const searchInfo = await getSiteSearchInfo(site, site._baseUrl);
+
+      if (!searchInfo.host) {
+        return { key, result: { status: 'skip', reason: 'no_host', type: 'spider' } };
+      }
+
+      // 只做连通性测试（HEAD 请求）
+      const r = await testUrl(searchInfo.host, 5000);
+      return {
+        key,
+        result: {
+          status: r.ok ? 'ok' : 'fail',
+          host: searchInfo.host,
+          type: 'spider',
+          latency: r.latency,
+          httpStatus: r.status,
+          reason: r.ok ? 'alive_spider' : (r.error || 'http_error'),
+          error: r.error
+        }
+      };
+    }));
+
+    for (const br of batchResults) {
+      if (br.status === 'fulfilled') {
+        const { key, result } = br.value;
+        results[key] = result;
+        if (result.status !== 'skip') type3Tested++;
+        if (result.status === 'ok') type3Alive++;
+      }
+    }
+
+    const progress = Math.min(i + CONCURRENCY_TYPE3, type3Sites.length);
+    if (progress % 50 === 0 || progress === type3Sites.length) {
+      console.log(`  连通进度: ${progress}/${type3Sites.length} (存活: ${type3Alive}/${type3Tested})`);
+    }
+  }
+
+  tested += type3Tested;
+  searchable += type3Alive;
+  console.log(`  type:3 连通测试完成: ${type3Tested} 测试, ${type3Alive} 存活`);
+  console.log(`\n总计: ${tested} 测试, ${searchable} 可用`);
 
   // 生成 searchable.json - 只保留搜索可用的站点
   console.log('\n生成 searchable.json...');
@@ -685,6 +743,10 @@ async function main() {
       testable: testableSites.length,
       tested,
       searchable,
+      type1_tested: type1Sites.length,
+      type1_searchable: Object.values(results).filter(r => r.type !== 'spider' && r.status === 'ok').length,
+      type3_tested: type3Tested,
+      type3_alive: type3Alive,
       skipped: testableSites.length - tested,
       excluded: merged.sites.length - testableSites.length
     },
